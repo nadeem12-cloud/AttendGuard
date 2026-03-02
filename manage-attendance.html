@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AttendGuard — Manage Attendance</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="theme.js"></script>
+  <style>
+    .cal-day { cursor:pointer; transition:var(--transition); }
+    .cal-day:hover { border-color:var(--accent); background:rgba(124,106,255,0.08); }
+    .cal-day.today { border-color:var(--accent); background:rgba(124,106,255,0.12); color:var(--accent); }
+    .cal-day.has-data::after { content:''; display:block; width:4px; height:4px; border-radius:50%; background:var(--accent); margin:2px auto 0; }
+  </style>
+</head>
+<body>
+
+  <header class="ag-header">
+    <a href="home.html" class="ag-logo"><div class="ag-logo-dot"></div>AttendGuard</a>
+    <div class="ag-header-actions">
+      <span class="theme-icon" id="themeIcon">☀️</span>
+      <button class="theme-toggle" id="themeToggle"></button>
+      <a href="home.html" class="btn btn-ghost">← Home</a>
+    </div>
+  </header>
+
+  <main class="ag-main-wide">
+    <div class="fade-up">
+      <div class="ag-page-title">📋 Manage Attendance</div>
+      <div class="ag-page-sub">Edit your attendance records by date</div>
+    </div>
+
+    <!-- Calendar -->
+    <div class="ag-card fade-up-1 mb-2">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;" id="calMonthLabel"></div>
+      </div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+    </div>
+
+    <!-- Editor -->
+    <div id="attendanceEditor" class="ag-card fade-up-2 mb-2" style="display:none;"></div>
+
+    <!-- Summary -->
+    <div class="ag-section-label fade-up-3">Attendance Summary</div>
+    <div id="attendanceView" class="fade-up-3" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.75rem;"></div>
+  </main>
+
+  <footer class="ag-footer">© 2025 AttendGuard · Made with 💜 by Nadeem Memon</footer>
+
+  <script type="module">
+    import { auth, db } from "./firebase-config.js";
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-auth.js";
+    import { ref, get, set, update, push } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-database.js";
+
+    initThemeToggle();
+    let currentUser = null;
+
+    onAuthStateChanged(auth, (user) => {
+      if (!user) { window.location.href = "index.html"; return; }
+      currentUser = user;
+      renderCalendar();
+      loadSummary();
+    });
+
+    function renderCalendar() {
+      const grid = document.getElementById("calendarGrid");
+      grid.innerHTML = "";
+      const today = new Date();
+      const year = today.getFullYear(), month = today.getMonth();
+      document.getElementById("calMonthLabel").textContent =
+        today.toLocaleDateString("en-US", { month:"long", year:"numeric" });
+
+      ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].forEach(d => {
+        const el = document.createElement("div");
+        el.className = "cal-header"; el.textContent = d;
+        grid.appendChild(el);
+      });
+
+      const firstDay = new Date(year, month, 1).getDay();
+      const lastDate = new Date(year, month+1, 0).getDate();
+      const todayStr = today.toISOString().split("T")[0];
+
+      for (let i = 0; i < firstDay; i++) {
+        grid.appendChild(document.createElement("div"));
+      }
+
+      for (let i = 1; i <= lastDate; i++) {
+        const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(i).padStart(2,"0")}`;
+        const el = document.createElement("div");
+        el.className = "cal-day" + (dateStr === todayStr ? " today" : "");
+        el.innerHTML = `<div class="cal-day-num">${i}</div>`;
+        el.addEventListener("click", () => openEditor(new Date(year, month, i)));
+        grid.appendChild(el);
+      }
+    }
+
+    async function openEditor(date) {
+      if (!currentUser) return;
+      const uid = currentUser.uid;
+      const dateStr = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+      const dayName = date.toLocaleDateString("en-US", { weekday:"long" });
+      const editor = document.getElementById("attendanceEditor");
+      editor.style.display = "block";
+      editor.innerHTML = `<p style="color:var(--muted);">Loading for ${dateStr}...</p>`;
+
+      const ttSnap = await get(ref(db, `users/${uid}/timetable`));
+      if (!ttSnap.exists()) { editor.innerHTML = `<p style="color:var(--muted);">No timetable found.</p>`; return; }
+
+      const subjects = [];
+      ttSnap.forEach(child => { if (child.val().day.toLowerCase() === dayName.toLowerCase()) subjects.push(child.val().subject); });
+
+      if (!subjects.length) { editor.innerHTML = `<p style="color:var(--muted);">No classes on ${dayName}.</p>`; return; }
+
+      const logsSnap = await get(ref(db, `users/${uid}/attendanceLog`));
+      const logs = logsSnap.exists() ? logsSnap.val() : {};
+      const dayRecords = Object.entries(logs).filter(([,r]) => r.date === dateStr);
+
+      let html = `<div style="font-family:'Syne',sans-serif;font-weight:700;margin-bottom:1rem;">Edit — ${dateStr} <span style="color:var(--muted);font-size:0.8rem;">(${dayName})</span></div>`;
+      subjects.forEach(subject => {
+        const existing = dayRecords.find(([,r]) => r.subject === subject);
+        const status = existing ? existing[1].status : "absent";
+        const id = existing ? existing[0] : "";
+        html += `
+          <div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;">
+            <span style="flex:1;font-weight:500;font-size:0.9rem;">${subject}</span>
+            <select class="status-select ag-select" data-id="${id}" data-subject="${subject}" style="width:160px;">
+              <option value="present" ${status==="present"?"selected":""}>Present</option>
+              <option value="absent" ${status==="absent"?"selected":""}>Absent</option>
+              <option value="mass bunk" ${status==="mass bunk"?"selected":""}>Mass Bunk</option>
+              <option value="cancelled" ${status==="cancelled"?"selected":""}>Cancelled</option>
+            </select>
+          </div>`;
+      });
+      html += `<button id="saveAttendance" class="btn btn-primary" style="margin-top:0.5rem;">Save Changes</button>`;
+      editor.innerHTML = html;
+
+      document.getElementById("saveAttendance").addEventListener("click", async () => {
+        for (const sel of document.querySelectorAll(".status-select")) {
+          const id = sel.dataset.id, subject = sel.dataset.subject, status = sel.value;
+          if (id) {
+            await update(ref(db, `users/${uid}/attendanceLog/${id}`), { status });
+          } else {
+            const newRef = push(ref(db, `users/${uid}/attendanceLog`));
+            await set(newRef, { date: dateStr, subject, status });
+          }
+        }
+        showToast("Attendance saved!", "success");
+        loadSummary();
+      });
+    }
+
+    async function loadSummary() {
+      if (!currentUser) return;
+      const snap = await get(ref(db, `users/${currentUser.uid}/attendance`));
+      const view = document.getElementById("attendanceView");
+      view.innerHTML = "";
+      if (!snap.exists()) { view.innerHTML = `<p style="color:var(--muted);font-size:0.85rem;">No records yet.</p>`; return; }
+
+      snap.forEach(child => {
+        const { attended, total } = child.val();
+        const pct = total > 0 ? Math.round((attended/total)*100) : 0;
+        const isRisk = pct < 75;
+        const card = document.createElement("div");
+        card.className = "ag-card ag-card-accent";
+        card.innerHTML = `
+          <div style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent);margin-bottom:0.5rem;font-size:0.88rem;">${child.key}</div>
+          <div style="font-size:0.8rem;color:var(--muted);">Attended: ${attended} / ${total}</div>
+          <div style="font-size:1.2rem;font-weight:700;margin-top:0.3rem;color:${isRisk?"var(--danger)":"var(--success)"};">${pct}%</div>
+        `;
+        view.appendChild(card);
+      });
+    }
+  </script>
+</body>
+</html>

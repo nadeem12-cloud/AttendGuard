@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AttendGuard — Timetable</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="theme.js"></script>
+</head>
+<body>
+
+  <header class="ag-header">
+    <a href="home.html" class="ag-logo"><div class="ag-logo-dot"></div>AttendGuard</a>
+    <div class="ag-header-actions">
+      <span class="theme-icon" id="themeIcon">☀️</span>
+      <button class="theme-toggle" id="themeToggle"></button>
+      <a href="home.html" class="btn btn-ghost">← Home</a>
+    </div>
+  </header>
+
+  <main class="ag-main">
+    <div class="fade-up">
+      <div class="ag-page-title">📅 Timetable</div>
+      <div class="ag-page-sub">Manage your weekly class schedule</div>
+    </div>
+
+    <div class="ag-card ag-card-accent fade-up-1 mb-2">
+      <div class="ag-form">
+        <div class="ag-field">
+          <label class="ag-label">Day</label>
+          <select id="day" class="ag-select">
+            <option value="" disabled selected>Select Day</option>
+            <option>Monday</option><option>Tuesday</option><option>Wednesday</option>
+            <option>Thursday</option><option>Friday</option><option>Saturday</option>
+          </select>
+        </div>
+        <div class="ag-field">
+          <label class="ag-label">Subject</label>
+          <input type="text" id="subject" class="ag-input" placeholder="Subject name"/>
+        </div>
+        <div class="ag-field">
+          <label class="ag-label">Time</label>
+          <input type="time" id="time" class="ag-input"/>
+        </div>
+        <button id="addBtn" class="btn btn-primary btn-full">Add to Timetable</button>
+      </div>
+    </div>
+
+    <div class="ag-section-label fade-up-2">Your Schedule</div>
+    <div id="timetableDisplay" class="fade-up-2" style="display:flex;flex-direction:column;gap:0.75rem;">
+      <p style="color:var(--muted);font-size:0.85rem;">Loading...</p>
+    </div>
+  </main>
+
+  <footer class="ag-footer">© 2025 AttendGuard · Made with 💜 by Nadeem Memon</footer>
+
+  <script type="module">
+    import { auth, db } from "./firebase-config.js";
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-auth.js";
+    import { ref, push, set, onValue, remove } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-database.js";
+
+    initThemeToggle();
+    let currentUser = null;
+    const dayOrder = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+    onAuthStateChanged(auth, (user) => {
+      if (!user) { window.location.href = "index.html"; return; }
+      currentUser = user;
+      loadTimetable();
+    });
+
+    function loadTimetable() {
+      onValue(ref(db, `users/${currentUser.uid}/timetable`), (snap) => {
+        const display = document.getElementById("timetableDisplay");
+        display.innerHTML = "";
+        if (!snap.exists()) {
+          display.innerHTML = `<p style="color:var(--muted);font-size:0.85rem;">No entries yet.</p>`;
+          return;
+        }
+        const grouped = {};
+        snap.forEach(child => {
+          const e = { id: child.key, ...child.val() };
+          if (!grouped[e.day]) grouped[e.day] = [];
+          grouped[e.day].push(e);
+        });
+
+        dayOrder.forEach(day => {
+          if (!grouped[day]) return;
+          const sorted = grouped[day].sort((a,b) => a.time.localeCompare(b.time));
+          const div = document.createElement("div");
+          div.className = "ag-card";
+          div.innerHTML = `<div style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent);margin-bottom:0.75rem;font-size:0.9rem;">${day}</div>`;
+          sorted.forEach(e => {
+            const row = document.createElement("div");
+            row.style.cssText = "display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-top:1px solid var(--border);";
+            row.innerHTML = `
+              <div>
+                <span style="font-weight:500;">${e.subject}</span>
+                <span style="color:var(--muted);font-size:0.8rem;margin-left:0.5rem;">${e.time}</span>
+              </div>
+              <button data-id="${e.id}" class="delBtn btn btn-danger" style="padding:0.25rem 0.6rem;font-size:0.75rem;">✕</button>
+            `;
+            div.appendChild(row);
+          });
+          display.appendChild(div);
+        });
+
+        document.querySelectorAll(".delBtn").forEach(btn => {
+          btn.addEventListener("click", () => {
+            remove(ref(db, `users/${currentUser.uid}/timetable/${btn.dataset.id}`));
+            showToast("Entry removed", "success");
+          });
+        });
+      });
+    }
+
+    document.getElementById("addBtn").addEventListener("click", async () => {
+      const day = document.getElementById("day").value;
+      const subject = document.getElementById("subject").value.trim();
+      const time = document.getElementById("time").value;
+      if (!day || !subject || !time) { showToast("Fill in all fields", "warning"); return; }
+      const newRef = push(ref(db, `users/${currentUser.uid}/timetable`));
+      await set(newRef, { day, subject, time });
+      document.getElementById("subject").value = "";
+      document.getElementById("time").value = "";
+      showToast(`${subject} added to ${day}`, "success");
+    });
+  </script>
+</body>
+</html>

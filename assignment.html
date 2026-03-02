@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AttendGuard — Assignments</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="theme.js"></script>
+</head>
+<body>
+
+  <header class="ag-header">
+    <a href="home.html" class="ag-logo"><div class="ag-logo-dot"></div>AttendGuard</a>
+    <div class="ag-header-actions">
+      <span class="theme-icon" id="themeIcon">☀️</span>
+      <button class="theme-toggle" id="themeToggle"></button>
+      <a href="home.html" class="btn btn-ghost">← Home</a>
+    </div>
+  </header>
+
+  <main class="ag-main">
+    <div class="fade-up">
+      <div class="ag-page-title">📝 Assignments</div>
+      <div class="ag-page-sub">Track your deadlines</div>
+    </div>
+
+    <div class="ag-card ag-card-accent fade-up-1 mb-2">
+      <div class="ag-form">
+        <div class="ag-field">
+          <label class="ag-label">Title</label>
+          <input type="text" id="title" class="ag-input" placeholder="Assignment title"/>
+        </div>
+        <div class="ag-field">
+          <label class="ag-label">Subject (optional)</label>
+          <input type="text" id="subject" class="ag-input" placeholder="e.g. Python Lab"/>
+        </div>
+        <div class="ag-field">
+          <label class="ag-label">Due Date</label>
+          <input type="date" id="dueDate" class="ag-input"/>
+        </div>
+        <button id="addBtn" class="btn btn-primary btn-full">Add Assignment</button>
+      </div>
+    </div>
+
+    <div class="ag-section-label fade-up-2">Your Assignments</div>
+    <div id="assignmentList" class="fade-up-2" style="display:flex;flex-direction:column;gap:0.6rem;">
+      <p style="color:var(--muted);font-size:0.85rem;">Loading...</p>
+    </div>
+  </main>
+
+  <footer class="ag-footer">© 2025 AttendGuard · Made with 💜 by Nadeem Memon</footer>
+
+  <script type="module">
+    import { auth, db } from "./firebase-config.js";
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-auth.js";
+    import { ref, push, set, onValue, remove, update } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-database.js";
+
+    initThemeToggle();
+    let currentUser = null;
+
+    onAuthStateChanged(auth, (user) => {
+      if (!user) { window.location.href = "index.html"; return; }
+      currentUser = user;
+      loadAssignments();
+    });
+
+    function loadAssignments() {
+      onValue(ref(db, `users/${currentUser.uid}/assignments`), (snap) => {
+        const list = document.getElementById("assignmentList");
+        list.innerHTML = "";
+        if (!snap.exists()) {
+          list.innerHTML = `<p style="color:var(--muted);font-size:0.85rem;">No assignments yet!</p>`;
+          return;
+        }
+
+        const today = new Date().toISOString().split("T")[0];
+        const items = [];
+        snap.forEach(child => items.push({ id: child.key, ...child.val() }));
+        items.sort((a,b) => a.dueDate.localeCompare(b.dueDate));
+
+        items.forEach(item => {
+          const overdue = item.dueDate < today && !item.done;
+          const card = document.createElement("div");
+          card.className = "ag-card";
+          card.style.cssText = `border-left: 3px solid ${item.done ? "var(--success)" : overdue ? "var(--danger)" : "var(--accent)"};opacity:${item.done?0.6:1};`;
+          card.innerHTML = `
+            <div class="flex-between">
+              <div style="flex:1;">
+                <div style="font-weight:600;${item.done?"text-decoration:line-through;color:var(--muted)":""}">${item.title}</div>
+                ${item.subject ? `<div style="font-size:0.78rem;color:var(--accent);margin-top:0.15rem;">${item.subject}</div>` : ""}
+                <div style="font-size:0.78rem;margin-top:0.25rem;color:${overdue&&!item.done?"var(--danger)":"var(--muted)"};">
+                  Due: ${item.dueDate} ${overdue&&!item.done?"⚠️ Overdue":""}
+                </div>
+              </div>
+              <div style="display:flex;gap:0.4rem;margin-left:0.75rem;">
+                <button data-id="${item.id}" data-done="${item.done}" class="doneBtn btn ${item.done?"btn-ghost":"btn-success"}" style="padding:0.3rem 0.6rem;font-size:0.75rem;">
+                  ${item.done?"Undo":"✓"}
+                </button>
+                <button data-id="${item.id}" class="delBtn btn btn-danger" style="padding:0.3rem 0.6rem;font-size:0.75rem;">✕</button>
+              </div>
+            </div>
+          `;
+          list.appendChild(card);
+        });
+
+        document.querySelectorAll(".doneBtn").forEach(btn => {
+          btn.addEventListener("click", () => {
+            const isDone = btn.dataset.done === "true";
+            update(ref(db, `users/${currentUser.uid}/assignments/${btn.dataset.id}`), { done: !isDone });
+            showToast(isDone ? "Marked undone" : "Marked done! 🎉", "success");
+          });
+        });
+
+        document.querySelectorAll(".delBtn").forEach(btn => {
+          btn.addEventListener("click", () => {
+            remove(ref(db, `users/${currentUser.uid}/assignments/${btn.dataset.id}`));
+            showToast("Assignment deleted", "success");
+          });
+        });
+      });
+    }
+
+    document.getElementById("addBtn").addEventListener("click", async () => {
+      const title = document.getElementById("title").value.trim();
+      const subject = document.getElementById("subject").value.trim();
+      const dueDate = document.getElementById("dueDate").value;
+      if (!title || !dueDate) { showToast("Fill in title and due date", "warning"); return; }
+      const newRef = push(ref(db, `users/${currentUser.uid}/assignments`));
+      await set(newRef, { title, subject, dueDate, done: false, createdAt: new Date().toISOString() });
+      document.getElementById("title").value = "";
+      document.getElementById("subject").value = "";
+      document.getElementById("dueDate").value = "";
+      showToast("Assignment added!", "success");
+    });
+  </script>
+</body>
+</html>

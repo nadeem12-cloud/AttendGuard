@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AttendGuard — Analytics</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="theme.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <header class="ag-header">
+    <a href="home.html" class="ag-logo"><div class="ag-logo-dot"></div>AttendGuard</a>
+    <div class="ag-header-actions">
+      <span class="theme-icon" id="themeIcon">☀️</span>
+      <button class="theme-toggle" id="themeToggle"></button>
+      <a href="home.html" class="btn btn-ghost">← Home</a>
+    </div>
+  </header>
+
+  <main class="ag-main-wide">
+    <div class="fade-up">
+      <div class="ag-page-title">📊 Attendance Analytics</div>
+      <div class="ag-page-sub">Subject-wise breakdown of your attendance</div>
+    </div>
+
+    <!-- Risk Banner -->
+    <div id="riskBanner" class="fade-up-1" style="display:none; background:rgba(255,77,109,0.1); border:1px solid rgba(255,77,109,0.25); border-radius:var(--radius); padding:0.9rem 1.1rem; margin-bottom:1.25rem; color:var(--danger); font-size:0.85rem;">
+      ⚠️ <strong>At risk:</strong> <span id="riskList"></span>
+    </div>
+
+    <!-- Table -->
+    <div class="ag-table-wrap fade-up-1 mb-2">
+      <table class="ag-table">
+        <thead>
+          <tr>
+            <th>Subject</th>
+            <th>Attended</th>
+            <th>Total</th>
+            <th>Percentage</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="analyticsTable">
+          <tr><td colspan="5" style="color:var(--muted);text-align:center;padding:2rem;">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Chart -->
+    <div class="ag-card fade-up-2">
+      <div style="font-family:'Syne',sans-serif;font-weight:600;margin-bottom:1rem;font-size:0.9rem;">Attendance Chart</div>
+      <canvas id="attendanceChart" height="80"></canvas>
+    </div>
+  </main>
+
+  <footer class="ag-footer">© 2025 AttendGuard · Made with 💜 by Nadeem Memon</footer>
+
+  <script type="module">
+    import { auth, db } from "./firebase-config.js";
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-auth.js";
+    import { ref, get } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-database.js";
+
+    initThemeToggle();
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) { window.location.href = "index.html"; return; }
+
+      const snap = await get(ref(db, `users/${user.uid}/attendance`));
+      const tbody = document.getElementById("analyticsTable");
+
+      if (!snap.exists()) {
+        tbody.innerHTML = `<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:2rem;">No attendance data yet.</td></tr>`;
+        return;
+      }
+
+      const data = snap.val();
+      const subjects = Object.keys(data);
+      const atRisk = [];
+      tbody.innerHTML = "";
+
+      const labels = [], values = [], colors = [];
+
+      subjects.forEach(subject => {
+        const { attended, total } = data[subject];
+        const pct = total > 0 ? Math.round((attended / total) * 100) : 0;
+        const isRisk = pct < 75;
+        if (isRisk) atRisk.push(subject);
+
+        labels.push(subject);
+        values.push(pct);
+        colors.push(isRisk ? "rgba(255,77,109,0.7)" : "rgba(124,106,255,0.7)");
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td style="font-weight:500;">${subject}</td>
+          <td>${attended}</td>
+          <td>${total}</td>
+          <td style="font-weight:600; color:${isRisk ? 'var(--danger)' : 'var(--success)'};">${pct}%</td>
+          <td>
+            ${isRisk
+              ? `<span class="badge badge-danger">At Risk</span>`
+              : `<span class="badge badge-success">Safe</span>`}
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Risk banner
+      if (atRisk.length > 0) {
+        document.getElementById("riskBanner").style.display = "block";
+        document.getElementById("riskList").textContent = atRisk.join(", ");
+      }
+
+      // Chart
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      new Chart(document.getElementById("attendanceChart"), {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{
+            label: "% Attendance",
+            data: values,
+            backgroundColor: colors,
+            borderRadius: 6,
+            borderSkipped: false,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: { label: ctx => ` ${ctx.raw}%` }
+            }
+          },
+          scales: {
+            y: {
+              min: 0, max: 100,
+              grid: { color: "rgba(255,255,255,0.05)" },
+              ticks: { color: "#6b6b80", callback: v => v + "%" }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: "#6b6b80" }
+            }
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>

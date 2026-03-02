@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AttendGuard — Home</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="theme.js"></script>
+  <style>
+    @media (max-width: 420px) {
+      .btn-label { display: none; }
+      .ag-header-actions { gap: 0.35rem; }
+      .ag-header-actions .btn { padding: 0.4rem 0.55rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="ag-header">
+    <a href="home.html" class="ag-logo">
+      <div class="ag-logo-dot"></div>
+      AttendGuard
+    </a>
+    <div class="ag-header-actions">
+  <span class="theme-icon" id="themeIcon">☀️</span>
+  <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+  <div style="position:relative;">
+    <button id="menuBtn" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:1.1rem;">☰</button>
+    <div id="menuDropdown" style="display:none;position:absolute;right:0;top:42px;background:var(--surface);border:1px solid var(--border);border-radius:10px;min-width:130px;overflow:hidden;z-index:999;box-shadow:0 8px 24px rgba(0,0,0,0.2);">
+      <a href="Profile.html" style="display:block;padding:0.7rem 1rem;color:var(--text);text-decoration:none;font-size:0.85rem;border-bottom:1px solid var(--border);">👤 Profile</a>
+      <button id="logoutBtn" style="width:100%;text-align:left;padding:0.7rem 1rem;background:none;border:none;color:var(--danger);font-size:0.85rem;cursor:pointer;font-family:'DM Sans',sans-serif;">⎋ Log Out</button>
+    </div>
+  </div>
+</div>
+  </header>
+
+  <main class="ag-main">
+    <!-- Greeting -->
+    <div class="fade-up mb-2">
+      <div class="greeting-time" id="timeGreeting">Good Morning</div>
+      <div class="greeting-name" id="userName">Hey there 👋</div>
+      <div class="greeting-sub" id="userEmail">Loading...</div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row fade-up-1">
+      <div class="stat-card ag-card-accent">
+        <div class="stat-label">Subjects</div>
+        <div class="stat-value accent" id="subjectCount">—</div>
+      </div>
+      <div class="stat-card ag-card-accent">
+        <div class="stat-label">At Risk ⚠️</div>
+        <div class="stat-value danger" id="atRiskCount">—</div>
+      </div>
+    </div>
+
+    <div class="ag-section-label fade-up-2">Quick Access</div>
+
+    <!-- Nav Grid -->
+    <div class="nav-grid">
+      <a href="attendance.html" class="nav-card fade-up-2">
+        <div class="nav-icon purple">✅</div>
+        <div>
+          <div class="nav-title">Mark Attendance</div>
+          <div class="nav-desc">Today's classes</div>
+        </div>
+        <span class="nav-arrow">↗</span>
+      </a>
+
+      <a href="attendance-analytics.html" class="nav-card fade-up-3">
+        <div class="nav-icon green">📊</div>
+        <div>
+          <div class="nav-title">Analytics</div>
+          <div class="nav-desc">View your stats</div>
+        </div>
+        <span class="nav-arrow">↗</span>
+      </a>
+
+      <a href="time-table.html" class="nav-card fade-up-3">
+        <div class="nav-icon blue">📅</div>
+        <div>
+          <div class="nav-title">Timetable</div>
+          <div class="nav-desc">Manage schedule</div>
+        </div>
+        <span class="nav-arrow">↗</span>
+      </a>
+
+      <a href="manage-attendance.html" class="nav-card fade-up-4">
+        <div class="nav-icon orange">📋</div>
+        <div>
+          <div class="nav-title">Manage</div>
+          <div class="nav-desc">Edit records</div>
+        </div>
+        <span class="nav-arrow">↗</span>
+      </a>
+
+      <a href="assignment.html" class="nav-card fade-up-4">
+        <div class="nav-icon yellow">📝</div>
+        <div>
+          <div class="nav-title">Assignments</div>
+          <div class="nav-desc">Track deadlines</div>
+        </div>
+        <span class="nav-arrow">↗</span>
+      </a>
+
+      <a href="add-subject.html" class="nav-card fade-up-5">
+        <div class="nav-icon pink">➕</div>
+        <div>
+          <div class="nav-title">Add Subject</div>
+          <div class="nav-desc">New course</div>
+        </div>
+        <span class="nav-arrow">↗</span>
+      </a>
+    </div>
+  </main>
+
+  <footer class="ag-footer">© 2025 AttendGuard · Made with 💜 by Nadeem Memon</footer>
+
+  <script type="module">
+    import { auth, db } from "./firebase-config.js";
+    import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-auth.js";
+    import { ref, get } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-database.js";
+
+    initThemeToggle();
+
+    const hour = new Date().getHours();
+    const greetEl = document.getElementById("timeGreeting");
+    greetEl.textContent = hour < 12 ? "Good Morning ☀️" : hour < 17 ? "Good Afternoon 🌤" : "Good Evening 🌙";
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) { window.location.href = "index.html"; return; }
+      const name = user.displayName || user.email.split("@")[0];
+      document.getElementById("userName").textContent = `Hey, ${name} 👋`;
+      document.getElementById("userEmail").textContent = user.email;
+
+      try {
+        const snap = await get(ref(db, `users/${user.uid}/attendance`));
+        if (snap.exists()) {
+          const data = snap.val();
+          const subjects = Object.keys(data);
+          const atRisk = subjects.filter(s => data[s].total > 0 && (data[s].attended / data[s].total) * 100 < 75);
+          document.getElementById("subjectCount").textContent = subjects.length;
+          document.getElementById("atRiskCount").textContent = atRisk.length;
+        } else {
+          document.getElementById("subjectCount").textContent = "0";
+          document.getElementById("atRiskCount").textContent = "0";
+        }
+      } catch(e) {}
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", async () => {
+      await signOut(auth);
+      window.location.href = "index.html";
+    });
+    document.getElementById("menuBtn").addEventListener("click", () => {
+  const d = document.getElementById("menuDropdown");
+  d.style.display = d.style.display === "none" ? "block" : "none";
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#menuBtn") && !e.target.closest("#menuDropdown"))
+    document.getElementById("menuDropdown").style.display = "none";
+});
+  </script>
+</body>
+</html>

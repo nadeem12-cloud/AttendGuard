@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AttendGuard — Mark Attendance</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="theme.js"></script>
+</head>
+<body>
+
+  <header class="ag-header">
+    <a href="home.html" class="ag-logo"><div class="ag-logo-dot"></div>AttendGuard</a>
+    <div class="ag-header-actions">
+      <span class="theme-icon" id="themeIcon">☀️</span>
+      <button class="theme-toggle" id="themeToggle"></button>
+      <a href="home.html" class="btn btn-ghost">← Home</a>
+    </div>
+  </header>
+
+  <main class="ag-main">
+    <div class="fade-up">
+      <div class="ag-page-title">✅ Mark Attendance</div>
+      <div class="ag-page-sub" id="todayLabel">Loading today's schedule...</div>
+    </div>
+
+    <div id="container" class="fade-up-1" style="display:flex;flex-direction:column;gap:0.75rem;">
+      <p style="color:var(--muted);font-size:0.85rem;">Loading...</p>
+    </div>
+  </main>
+
+  <footer class="ag-footer">© 2025 AttendGuard · Made with 💜 by Nadeem Memon</footer>
+
+  <script type="module">
+    import { auth, db } from "./firebase-config.js";
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-auth.js";
+    import { ref, get, set } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-database.js";
+
+    initThemeToggle();
+
+    const weekdays = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    const todayName = weekdays[new Date().getDay()];
+    const dateKey = new Date().toISOString().split("T")[0];
+    document.getElementById("todayLabel").textContent = `${todayName} · ${dateKey}`;
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) { window.location.href = "index.html"; return; }
+      const container = document.getElementById("container");
+      const snap = await get(ref(db, `users/${user.uid}/timetable`));
+
+      if (!snap.exists()) {
+        container.innerHTML = `<div class="ag-card"><p style="color:var(--muted);">No timetable found. <a href="time-table.html" style="color:var(--accent);">Add your timetable first.</a></p></div>`;
+        return;
+      }
+
+      const todaySubjects = [];
+      snap.forEach(child => { if (child.val().day === todayName) todaySubjects.push(child.val()); });
+
+      if (todaySubjects.length === 0) {
+        container.innerHTML = `<div class="ag-card"><p style="color:var(--muted);">No classes scheduled for ${todayName}. Enjoy! 🎉</p></div>`;
+        return;
+      }
+
+      container.innerHTML = "";
+
+      for (const entry of todaySubjects) {
+        const logKey = `${dateKey}_${entry.subject.replace(/\s/g,"_")}`;
+        const existSnap = await get(ref(db, `users/${user.uid}/attendanceLog/${logKey}`));
+        const marked = existSnap.exists();
+
+        const card = document.createElement("div");
+        card.className = "ag-card";
+
+        const statusColors = { present:"var(--success)", absent:"var(--danger)", mass_bunk:"var(--warning)", cancelled:"var(--muted)" };
+
+        card.innerHTML = `
+          <div class="flex-between mb-1">
+            <div>
+              <div style="font-family:'Syne',sans-serif;font-weight:600;font-size:1rem;">${entry.subject}</div>
+              <div style="color:var(--muted);font-size:0.78rem;">${entry.time || ""}</div>
+            </div>
+            ${marked ? `<span class="badge badge-success">✓ Marked</span>` : ""}
+          </div>
+          ${marked
+            ? `<div style="color:var(--success);font-size:0.85rem;margin-top:0.5rem;">Marked as <strong>${existSnap.val().status.replace("_"," ")}</strong></div>`
+            : `<div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
+                <button class="markBtn btn btn-success" data-val="present" style="flex:1;">✅ Present</button>
+                <button class="markBtn btn btn-danger" data-val="absent" style="flex:1;">❌ Absent</button>
+                <button class="markBtn btn btn-ghost" data-val="mass_bunk" style="flex:1;font-size:0.8rem;">👥 Mass Bunk</button>
+                <button class="markBtn btn btn-ghost" data-val="cancelled" style="flex:1;font-size:0.8rem;">🚫 Cancelled</button>
+              </div>`
+          }
+        `;
+
+        if (!marked) {
+          card.querySelectorAll(".markBtn").forEach(btn => {
+            btn.addEventListener("click", async () => {
+              const val = btn.dataset.val;
+              const attRef = ref(db, `users/${user.uid}/attendance/${entry.subject}`);
+              const logRef = ref(db, `users/${user.uid}/attendanceLog/${logKey}`);
+
+              const dataSnap = await get(attRef);
+              let attended = dataSnap.exists() ? (dataSnap.val().attended || 0) : 0;
+              let total = dataSnap.exists() ? (dataSnap.val().total || 0) : 0;
+
+              if (val !== "mass_bunk" && val !== "cancelled") {
+                total += 1;
+                if (val === "present") attended += 1;
+                await set(attRef, { attended, total });
+              }
+
+              await set(logRef, { subject: entry.subject, status: val, timestamp: new Date().toISOString() });
+              showToast(`${entry.subject} — ${val.replace("_"," ")}`, "success");
+
+              // Refresh card
+              card.querySelector("div:last-child").innerHTML = `<div style="color:var(--success);font-size:0.85rem;margin-top:0.75rem;">✓ Marked as <strong>${val.replace("_"," ")}</strong></div>`;
+            });
+          });
+        }
+
+        container.appendChild(card);
+      }
+    });
+  </script>
+</body>
+</html>

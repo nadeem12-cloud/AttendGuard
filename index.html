@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AttendGuard — Login</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="theme.js"></script>
+</head>
+<body>
+
+  <header class="ag-header">
+    <a href="index.html" class="ag-logo">
+      <div class="ag-logo-dot"></div>
+      AttendGuard
+    </a>
+    <div class="ag-header-actions">
+      <span class="theme-icon" id="themeIcon">☀️</span>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+    </div>
+  </header>
+
+  <div class="auth-wrap">
+    <div class="auth-card fade-up">
+      <div class="auth-logo">
+        <div class="ag-logo-dot"></div>
+        AttendGuard
+      </div>
+      <p class="auth-sub">Your smart attendance companion</p>
+
+      <div class="ag-form">
+        <div class="ag-field">
+          <label class="ag-label">Email</label>
+          <input type="email" id="email" class="ag-input" placeholder="you@example.com"/>
+        </div>
+        <div class="ag-field">
+          <label class="ag-label">Password</label>
+          <input type="password" id="password" class="ag-input" placeholder="••••••••"/>
+        </div>
+
+        <div class="auth-error" id="errorMsg"></div>
+
+        <button id="loginBtn" class="btn btn-primary btn-full">Login</button>
+
+        <p style="text-align:center; font-size:0.82rem;">
+          <a href="#" id="resetLink" style="color:var(--muted); text-decoration:none;">Forgot password?</a>
+        </p>
+      </div>
+
+      <div class="auth-link">
+        Don't have an account? <a href="sign-up.html">Sign up</a>
+      </div>
+    </div>
+  </div>
+
+  <footer class="ag-footer">© 2025 AttendGuard · Made with 💜 by Nadeem Memon</footer>
+
+  <script type="module">
+    import { auth } from "./firebase-config.js";
+    import { signInWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-auth.js";
+
+    initThemeToggle();
+
+    onAuthStateChanged(auth, (user) => { if (user) window.location.href = "home.html"; });
+
+    const loginBtn = document.getElementById("loginBtn");
+    const errorMsg = document.getElementById("errorMsg");
+
+    loginBtn.addEventListener("click", async () => {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      if (!email || !password) { errorMsg.style.display = "block"; errorMsg.textContent = "Please fill in all fields."; return; }
+      loginBtn.disabled = true; loginBtn.textContent = "Logging in...";
+      errorMsg.style.display = "none";
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        window.location.href = "home.html";
+      } catch (e) {
+        const msgs = { "auth/user-not-found": "No account with this email.", "auth/wrong-password": "Incorrect password.", "auth/invalid-email": "Invalid email.", "auth/too-many-requests": "Too many attempts. Try later." };
+        errorMsg.textContent = msgs[e.code] || "Login failed. Try again.";
+        errorMsg.style.display = "block";
+      } finally { loginBtn.disabled = false; loginBtn.textContent = "Login"; }
+    });
+
+    document.getElementById("resetLink").addEventListener("click", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("email").value.trim();
+      if (!email) { showToast("Enter your email first", "warning"); return; }
+      try { await sendPasswordResetEmail(auth, email); showToast("Reset email sent!", "success"); }
+      catch { showToast("Could not send reset email", "error"); }
+    });
+
+    document.addEventListener("keydown", (e) => { if (e.key === "Enter") loginBtn.click(); });
+  </script>
+</body>
+</html>

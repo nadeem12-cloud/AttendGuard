@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AttendGuard — Profile</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="theme.js"></script>
+  <style>
+    .avatar-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:0.6rem; margin-top:0.5rem; }
+    .avatar-opt {
+      width:60px; height:60px; border-radius:50%; border:2px solid var(--border);
+      cursor:pointer; transition:var(--transition); object-fit:cover;
+    }
+    .avatar-opt:hover { border-color:var(--accent); transform:scale(1.05); }
+    .avatar-opt.selected { border-color:var(--accent); box-shadow:0 0 0 3px rgba(124,106,255,0.3); }
+  </style>
+</head>
+<body>
+
+  <header class="ag-header">
+    <a href="home.html" class="ag-logo"><div class="ag-logo-dot"></div>AttendGuard</a>
+    <div class="ag-header-actions">
+      <span class="theme-icon" id="themeIcon">☀️</span>
+      <button class="theme-toggle" id="themeToggle"></button>
+      <a href="home.html" class="btn btn-ghost">← Home</a>
+    </div>
+  </header>
+
+  <main class="ag-main">
+    <div class="fade-up">
+      <div class="ag-page-title">👤 Profile</div>
+      <div class="ag-page-sub">Manage your account</div>
+    </div>
+
+    <!-- Profile Card -->
+    <div class="ag-card ag-card-accent fade-up-1 mb-2" style="text-align:center;">
+      <img id="profileImage" src="images/avatars/avatar1.png" alt="Avatar"
+        style="width:80px;height:80px;border-radius:50%;border:3px solid var(--accent);margin:0 auto 1rem;display:block;object-fit:cover;box-shadow:0 0 20px rgba(124,106,255,0.3);">
+      <div id="usernameDisplay" style="font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:700;">Loading...</div>
+      <div id="emailDisplay" style="color:var(--muted);font-size:0.83rem;margin-top:0.25rem;">Loading...</div>
+      <button id="editBtn" class="btn btn-ghost" style="margin-top:1rem;">Edit Profile</button>
+    </div>
+
+    <!-- Edit Form (hidden) -->
+    <div id="editForm" class="ag-card fade-up-2" style="display:none;">
+      <div style="font-family:'Syne',sans-serif;font-weight:700;margin-bottom:1rem;">Edit Profile</div>
+      <div class="ag-form">
+        <div class="ag-field">
+          <label class="ag-label">Display Name</label>
+          <input type="text" id="nameInput" class="ag-input" placeholder="Your name"/>
+        </div>
+        <div class="ag-field">
+          <label class="ag-label">Choose Avatar</label>
+          <div class="avatar-grid">
+            <img src="images/avatars/avatar1.png" class="avatar-opt" data-src="images/avatars/avatar1.png">
+            <img src="images/avatars/avatar2.png" class="avatar-opt" data-src="images/avatars/avatar2.png">
+            <img src="images/avatars/avatar3.png" class="avatar-opt" data-src="images/avatars/avatar3.png">
+            <img src="images/avatars/avatar4.png" class="avatar-opt" data-src="images/avatars/avatar4.png">
+            <img src="images/avatars/avatar5.png" class="avatar-opt" data-src="images/avatars/avatar5.png">
+            <img src="images/avatars/avatar6.png" class="avatar-opt" data-src="images/avatars/avatar6.png">
+          </div>
+        </div>
+        <button id="saveBtn" class="btn btn-primary btn-full">Save Changes</button>
+        <button id="cancelBtn" class="btn btn-ghost btn-full">Cancel</button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="ag-footer">© 2025 AttendGuard · Made with 💜 by Nadeem Memon</footer>
+
+  <script type="module">
+    import { auth } from "./firebase-config.js";
+    import { onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-auth.js";
+
+    initThemeToggle();
+
+    let selectedAvatar = null;
+
+    onAuthStateChanged(auth, (user) => {
+      if (!user) { window.location.href = "index.html"; return; }
+      const name = user.displayName || user.email.split("@")[0];
+      document.getElementById("usernameDisplay").textContent = name;
+      document.getElementById("emailDisplay").textContent = user.email;
+      document.getElementById("nameInput").value = name;
+
+      const savedAvatar = localStorage.getItem("ag-avatar") || "images/avatars/avatar1.png";
+      document.getElementById("profileImage").src = savedAvatar;
+      selectedAvatar = savedAvatar;
+
+      // Mark selected avatar
+      document.querySelectorAll(".avatar-opt").forEach(img => {
+        if (img.dataset.src === savedAvatar) img.classList.add("selected");
+        img.addEventListener("click", () => {
+          document.querySelectorAll(".avatar-opt").forEach(i => i.classList.remove("selected"));
+          img.classList.add("selected");
+          selectedAvatar = img.dataset.src;
+        });
+      });
+
+      document.getElementById("editBtn").addEventListener("click", () => {
+        document.getElementById("editForm").style.display = "block";
+        document.getElementById("editForm").scrollIntoView({ behavior:"smooth" });
+      });
+
+      document.getElementById("cancelBtn").addEventListener("click", () => {
+        document.getElementById("editForm").style.display = "none";
+      });
+
+      document.getElementById("saveBtn").addEventListener("click", async () => {
+        const newName = document.getElementById("nameInput").value.trim();
+        try {
+          await updateProfile(user, { displayName: newName });
+          localStorage.setItem("ag-avatar", selectedAvatar);
+          document.getElementById("usernameDisplay").textContent = newName;
+          document.getElementById("profileImage").src = selectedAvatar;
+          document.getElementById("editForm").style.display = "none";
+          showToast("Profile updated!", "success");
+        } catch {
+          showToast("Could not update profile", "error");
+        }
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AttendGuard — Sign Up</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="theme.js"></script>
+</head>
+<body>
+
+  <header class="ag-header">
+    <a href="index.html" class="ag-logo">
+      <div class="ag-logo-dot"></div>
+      AttendGuard
+    </a>
+    <div class="ag-header-actions">
+      <span class="theme-icon" id="themeIcon">☀️</span>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme"></button>
+    </div>
+  </header>
+
+  <div class="auth-wrap">
+    <div class="auth-card fade-up">
+      <div class="auth-logo">
+        <div class="ag-logo-dot"></div>
+        AttendGuard
+      </div>
+      <p class="auth-sub">Create your account</p>
+
+      <div class="ag-form">
+        <div class="ag-field">
+          <label class="ag-label">Email</label>
+          <input type="email" id="email" class="ag-input" placeholder="you@example.com"/>
+        </div>
+        <div class="ag-field">
+          <label class="ag-label">Password</label>
+          <input type="password" id="password" class="ag-input" placeholder="At least 6 characters"/>
+        </div>
+
+        <div class="auth-error" id="errorMsg"></div>
+
+        <button id="signupBtn" class="btn btn-primary btn-full">Create Account</button>
+      </div>
+
+      <div class="auth-link">
+        Already have an account? <a href="index.html">Log in</a>
+      </div>
+    </div>
+  </div>
+
+  <footer class="ag-footer">© 2025 AttendGuard · Made with 💜 by Nadeem Memon</footer>
+
+  <script type="module">
+    import { auth } from "./firebase-config.js";
+    import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-auth.js";
+
+    initThemeToggle();
+
+    const signupBtn = document.getElementById("signupBtn");
+    const errorMsg = document.getElementById("errorMsg");
+
+    signupBtn.addEventListener("click", async () => {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      if (!email || !password) { errorMsg.style.display="block"; errorMsg.textContent="Please fill in all fields."; return; }
+      signupBtn.disabled = true; signupBtn.textContent = "Creating...";
+      errorMsg.style.display = "none";
+      try {
+        await createUserWithEmailAndPassword(auth, email, password);
+        window.location.href = "home.html";
+      } catch (e) {
+        const msgs = { "auth/email-already-in-use":"Email already registered.", "auth/invalid-email":"Invalid email.", "auth/weak-password":"Password too weak." };
+        errorMsg.textContent = msgs[e.code] || e.message;
+        errorMsg.style.display = "block";
+      } finally { signupBtn.disabled = false; signupBtn.textContent = "Create Account"; }
+    });
+  </script>
+</body>
+</html>

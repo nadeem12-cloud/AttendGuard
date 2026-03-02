@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AttendGuard — Add Subject</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="theme.js"></script>
+</head>
+<body>
+
+  <header class="ag-header">
+    <a href="home.html" class="ag-logo">
+      <div class="ag-logo-dot"></div>
+      AttendGuard
+    </a>
+    <div class="ag-header-actions">
+      <span class="theme-icon" id="themeIcon">☀️</span>
+      <button class="theme-toggle" id="themeToggle"></button>
+      <a href="home.html" class="btn btn-ghost">← Home</a>
+    </div>
+  </header>
+
+  <main class="ag-main">
+    <div class="fade-up">
+      <div class="ag-page-title">➕ Add Subject</div>
+      <div class="ag-page-sub">Add your courses to start tracking attendance</div>
+    </div>
+
+    <div class="ag-card ag-card-accent fade-up-1 mb-2">
+      <div class="ag-form">
+        <div class="ag-field">
+          <label class="ag-label">Subject Name</label>
+          <input type="text" id="subjectName" class="ag-input" placeholder="e.g. Data Structures"/>
+        </div>
+        <button id="addBtn" class="btn btn-primary btn-full">Add Subject</button>
+      </div>
+    </div>
+
+    <div class="ag-section-label fade-up-2">Your Subjects</div>
+    <ul id="subjectList" class="fade-up-2" style="list-style:none; display:flex; flex-direction:column; gap:0.5rem;">
+      <li style="color:var(--muted); font-size:0.85rem;">Loading...</li>
+    </ul>
+  </main>
+
+  <footer class="ag-footer">© 2025 AttendGuard · Made with 💜 by Nadeem Memon</footer>
+
+  <script type="module">
+    import { auth, db } from "./firebase-config.js";
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-auth.js";
+    import { ref, push, set, onValue, remove } from "https://www.gstatic.com/firebasejs/9.6.0/firebase-database.js";
+
+    initThemeToggle();
+    let currentUser = null;
+
+    onAuthStateChanged(auth, (user) => {
+      if (!user) { window.location.href = "index.html"; return; }
+      currentUser = user;
+      loadSubjects();
+    });
+
+    function loadSubjects() {
+      onValue(ref(db, `users/${currentUser.uid}/subjects`), (snap) => {
+        const list = document.getElementById("subjectList");
+        list.innerHTML = "";
+        if (!snap.exists()) {
+          list.innerHTML = `<li style="color:var(--muted);font-size:0.85rem;">No subjects yet. Add one above!</li>`;
+          return;
+        }
+        snap.forEach(child => {
+          const li = document.createElement("li");
+          li.className = "ag-card";
+          li.style.cssText = "display:flex;justify-content:space-between;align-items:center;padding:0.9rem 1.1rem;";
+          li.innerHTML = `
+            <span style="font-weight:500;">${child.val().name}</span>
+            <button data-key="${child.key}" class="delBtn btn btn-danger" style="padding:0.3rem 0.7rem;font-size:0.78rem;">Remove</button>
+          `;
+          list.appendChild(li);
+        });
+        document.querySelectorAll(".delBtn").forEach(btn => {
+          btn.addEventListener("click", () => {
+            remove(ref(db, `users/${currentUser.uid}/subjects/${btn.dataset.key}`));
+            showToast("Subject removed", "success");
+          });
+        });
+      });
+    }
+
+    document.getElementById("addBtn").addEventListener("click", async () => {
+      const name = document.getElementById("subjectName").value.trim();
+      if (!name) { showToast("Enter a subject name", "warning"); return; }
+      const newRef = push(ref(db, `users/${currentUser.uid}/subjects`));
+      await set(newRef, { name, createdAt: new Date().toISOString() });
+      document.getElementById("subjectName").value = "";
+      showToast(`${name} added!`, "success");
+    });
+  </script>
+</body>
+</html>
