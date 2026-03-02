@@ -134,15 +134,11 @@ firebase deploy
 
 ## 📱 Screenshots
 
-<p align="center">
-  <img src="assets/ss1.png" width="200"/>
-  <img src="assets/ss2.png" width="200"/>
-  <img src="assets/ss3.png" width="200"/>
-</p>
-<p align="center">
-  <img src="assets/ss4.png" width="200"/>
-  <img src="assets/ss5.png" width="200"/>
-</p>
+<img src="assets/ss1.png" width="100%"/>
+<img src="assets/ss2.png" width="100%"/>
+<img src="assets/ss3.png" width="100%"/>
+<img src="assets/ss4.png" width="100%"/>
+<img src="assets/ss5.png" width="100%"/>
 
 ---
 
